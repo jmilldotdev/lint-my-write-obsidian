@@ -1,112 +1,122 @@
-import { App, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import {
+  App,
+  MarkdownView,
+  Modal,
+  Notice,
+  Plugin,
+  PluginSettingTab,
+  request,
+  RequestParam,
+  Setting,
+} from "obsidian";
 
 interface MyPluginSettings {
-	mySetting: string;
+  apiUrl: string;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
+  apiUrl: "http://localhost:3000/annotate",
+};
 
 export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+  settings: MyPluginSettings;
 
-	async onload() {
-		console.log('loading plugin');
+  getSelectedText(cm: CodeMirror.Editor) {
+    let selectedText: string;
 
-		await this.loadSettings();
+    if (cm.somethingSelected()) {
+      selectedText = cm.getSelection().trim();
+      return selectedText;
+    }
+  }
 
-		this.addRibbonIcon('dice', 'Sample Plugin', () => {
-			new Notice('This is a notice!');
-		});
+  async annotateSelection() {
+    const selection = this.getSelectedText(this.getEditor());
+    const body = JSON.stringify({
+      text: selection,
+      annotators: ["helloLint"],
+    });
+    const RequestParam: RequestParam = {
+      method: "POST",
+      url: this.settings.apiUrl,
+      contentType: "application/json",
+      body,
+    };
+    const res = await request(RequestParam);
+    console.log(res);
+  }
 
-		this.addStatusBarItem().setText('Status Bar Text');
+  async onload() {
+    await this.loadSettings();
 
-		this.addCommand({
-			id: 'open-sample-modal',
-			name: 'Open Sample Modal',
-			// callback: () => {
-			// 	console.log('Simple Callback');
-			// },
-			checkCallback: (checking: boolean) => {
-				let leaf = this.app.workspace.activeLeaf;
-				if (leaf) {
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-					return true;
-				}
-				return false;
-			}
-		});
+    this.addCommand({
+      id: "annotate-selection",
+      name: "Annotate Selection (helloLinter)",
+      callback: () => this.annotateSelection(),
+    });
 
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+    this.addSettingTab(new SampleSettingTab(this.app, this));
+  }
 
-		this.registerCodeMirror((cm: CodeMirror.Editor) => {
-			console.log('codemirror', cm);
-		});
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
 
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
 
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-	}
-
-	onunload() {
-		console.log('unloading plugin');
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
+  private getEditor(): CodeMirror.Editor {
+    let activeLeaf = this.app.workspace.activeLeaf;
+    if (activeLeaf.view instanceof MarkdownView) {
+      return activeLeaf.view.sourceMode.cmEditor;
+    } else throw new Error("activeLeaf.view not MarkdownView");
+  }
 }
 
 class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
+  constructor(app: App) {
+    super(app);
+  }
 
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
+  onOpen() {
+    let { contentEl } = this;
+    contentEl.setText("Woah!");
+  }
 
-	onClose() {
-		let {contentEl} = this;
-		contentEl.empty();
-	}
+  onClose() {
+    let { contentEl } = this;
+    contentEl.empty();
+  }
 }
 
 class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+  plugin: MyPlugin;
 
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
+  constructor(app: App, plugin: MyPlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
 
-	display(): void {
-		let {containerEl} = this;
+  display(): void {
+    let { containerEl } = this;
 
-		containerEl.empty();
+    containerEl.empty();
 
-		containerEl.createEl('h2', {text: 'Settings for my awesome plugin.'});
+    containerEl.createEl("h2", { text: "Settings for my awesome plugin." });
 
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue('')
-				.onChange(async (value) => {
-					console.log('Secret: ' + value);
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
-	}
+    new Setting(containerEl)
+      .setName("Setting #1")
+      .setDesc("It's a secret")
+      .addText((text) =>
+        text
+          .setPlaceholder("Enter your secret")
+          .setValue("")
+          .onChange(async (value) => {
+            console.log("Secret: " + value);
+            this.plugin.settings.apiUrl = value;
+            await this.plugin.saveSettings();
+          })
+      );
+  }
 }
